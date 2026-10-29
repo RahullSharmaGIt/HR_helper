@@ -1,0 +1,39 @@
+
+# API and validation
+fastapi[standard]
+pydantic
+pydantic-settings
+python-multipart
+
+# Database and migrations
+sqlalchemy
+alembic
+psycopg[binary]
+
+# Redis and background jobs
+redis
+rq
+
+# Resume parsing
+pymupdf
+python-docx
+
+# Git and GitHub
+gitpython
+httpx
+
+# Text similarity and analysis
+scikit-learn
+numpy
+
+# Security and file handling
+python-magic
+
+# Testing
+pytest
+pytest-cov
+httpx
+
+# Code quality and typing
+ruff
+mypy

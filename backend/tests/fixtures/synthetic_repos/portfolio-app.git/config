@@ -1,0 +1,8 @@
+[core]
+	repositoryformatversion = 0
+	filemode = true
+	bare = true
+	ignorecase = true
+	precomposeunicode = true
+[remote "origin"]
+	url = /var/folders/zd/25h9w5cn009b9l0wtl7d8cgc0000gn/T/tmpxeidp0fl
