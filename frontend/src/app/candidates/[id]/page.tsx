@@ -10,6 +10,7 @@ import {
   getCandidate,
   selectCandidateProject,
   listProjectRepositories,
+  discoverProjectRepositories,
   confirmRepositorySelection,
   triggerProjectAnalysis,
   deleteCandidate,
@@ -69,6 +70,21 @@ export default function CandidateDetailPage({ params }: CandidatePageProps) {
       setRepositories(repos);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to select project.";
+      setGeneralError(msg);
+    } finally {
+      setReposLoading(false);
+    }
+  };
+
+  const handleRefreshRepositories = async (limit: number = 10) => {
+    if (!candidate?.selectedProjectId) return;
+    setReposLoading(true);
+    setGeneralError(null);
+    try {
+      const repos = await discoverProjectRepositories(candidate.selectedProjectId, limit);
+      setRepositories(repos);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to refresh repositories.";
       setGeneralError(msg);
     } finally {
       setReposLoading(false);
@@ -329,6 +345,7 @@ export default function CandidateDetailPage({ params }: CandidatePageProps) {
             onTriggerAnalysis={handleTriggerAnalysis}
             hasActiveJob={Boolean(activeJobId)}
             loading={reposLoading}
+            onRefreshRepositories={handleRefreshRepositories}
           />
         ) : (
           <div className="p-8 bg-white border border-dashed border-slate-300 rounded-xl text-center text-xs text-slate-500 mb-10">

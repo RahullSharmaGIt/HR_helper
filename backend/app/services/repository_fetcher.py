@@ -154,7 +154,10 @@ def fetch_repository(
         if "inaccessible" in repository_url:
             raise GitFetchError("Remote repository not found or inaccessible.")
         if "portfolio-app" in repository_url:
-            fixture_repo = Path(__file__).resolve().parent.parent.parent / "tests/fixtures/synthetic_repos/portfolio-app.git"
+            fixture_repo = (
+                Path(__file__).resolve().parent.parent.parent
+                / "tests/fixtures/synthetic_repos/portfolio-app.git"
+            )
             if fixture_repo.exists():
                 repository_url = str(fixture_repo)
                 allow_file_transport = True

@@ -1,8 +1,9 @@
 import uuid
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Any, TypeVar
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from pydantic.alias_generators import to_camel
 
 T = TypeVar("T")
@@ -121,6 +122,15 @@ class ResumeSummary(ContractModel):
     file_size_bytes: int | None = None
     created_at: str
 
+    @field_validator("created_at", mode="before")
+    @classmethod
+    def coerce_created_at(cls, v: Any) -> str:
+        if isinstance(v, datetime):
+            return v.isoformat()
+        if v is None:
+            return datetime.now(UTC).isoformat()
+        return str(v)
+
 
 class ProjectSummary(ContractModel):
     id: uuid.UUID
@@ -131,6 +141,24 @@ class ProjectSummary(ContractModel):
     explicit_github_urls: list[str] = Field(default_factory=list)
     source_page: int | None = None
     created_at: str
+
+    @field_validator("explicit_github_urls", mode="before")
+    @classmethod
+    def coerce_urls(cls, v: Any) -> list[str]:
+        if v is None:
+            return []
+        if isinstance(v, list):
+            return [str(x) for x in v if x is not None]
+        return []
+
+    @field_validator("created_at", mode="before")
+    @classmethod
+    def coerce_created_at(cls, v: Any) -> str:
+        if isinstance(v, datetime):
+            return v.isoformat()
+        if v is None:
+            return datetime.now(UTC).isoformat()
+        return str(v)
 
 
 class CandidateSummary(ContractModel):
@@ -143,6 +171,15 @@ class CandidateSummary(ContractModel):
     created_at: str
     updated_at: str
 
+    @field_validator("created_at", "updated_at", mode="before")
+    @classmethod
+    def coerce_timestamps(cls, v: Any) -> str:
+        if isinstance(v, datetime):
+            return v.isoformat()
+        if v is None:
+            return datetime.now(UTC).isoformat()
+        return str(v)
+
 
 class CandidateDetailResponse(ContractModel):
     id: uuid.UUID
@@ -153,6 +190,15 @@ class CandidateDetailResponse(ContractModel):
     projects: list[ProjectSummary] = Field(default_factory=list)
     created_at: str
     updated_at: str
+
+    @field_validator("created_at", "updated_at", mode="before")
+    @classmethod
+    def coerce_timestamps(cls, v: Any) -> str:
+        if isinstance(v, datetime):
+            return v.isoformat()
+        if v is None:
+            return datetime.now(UTC).isoformat()
+        return str(v)
 
 
 class SelectProjectRequest(ContractModel):
@@ -173,6 +219,33 @@ class RepositorySelectionResponse(ContractModel):
 
 class ConfirmRepositoryRequest(ContractModel):
     repository_selection_id: uuid.UUID
+
+
+class BenchmarkRepositorySummary(ContractModel):
+    id: uuid.UUID
+    repository_url: str
+    owner: str
+    name: str
+    primary_language: str
+    description: str | None = None
+    license: str | None = None
+    stars_count: int = 0
+    default_branch: str = "main"
+    pinned_commit_sha: str
+    indexing_status: str
+    failure_reason: str | None = None
+    indexed_at: str | None = None
+    fingerprints_count: int = 0
+
+
+class BenchmarkProjectResponse(ContractModel):
+    id: uuid.UUID
+    category: str
+    name: str
+    description: str | None = None
+    repository: BenchmarkRepositorySummary | None = None
+    created_at: str
+    updated_at: str
 
 
 class AnalysisJobResponse(ContractModel):

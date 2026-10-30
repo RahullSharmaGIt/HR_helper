@@ -151,6 +151,8 @@ class PathMatchDetail:
     matched_fingerprints: int
     total_candidate_fingerprints: int
     overlap_ratio: float
+    benchmark_project_name: str | None = None
+    benchmark_category: str | None = None
 
 
 @dataclass
@@ -315,30 +317,7 @@ def compare_repository(
         "supported_languages": ["python", "javascript", "typescript"],
     }
 
-    # 1. Handle empty reference index
-    if reference_index.is_empty():
-        return SimilarityAnalysisResult(
-            overlap_score=Measurement[float](
-                value=None,
-                reason="Reference catalog collection is empty; similarity measurement unavailable.",
-            ),
-            matched_paths=[],
-            reference_commit_links=[],
-            coverage_statistics={
-                "candidate_files_analyzed": 0,
-                "candidate_tokens_analyzed": 0,
-                "reference_files_indexed": 0,
-            },
-            algorithm_version=ALGORITHM_VERSION,
-            algorithm_configuration=algo_config,
-            evidence=[],
-            limitations=[
-                "Reference catalog is empty; comparisons cannot be conducted.",
-                "Similarity results only evaluate matches against the configured reference collection.",
-            ],
-        )
-
-    # 2. Resolve candidate repository
+    # 1. Resolve candidate repository
     if isinstance(repository, RepositoryManifest):
         workspace_id = repository.workspace_key
         head_sha = repository.analyzed_head_sha
@@ -371,6 +350,42 @@ def compare_repository(
     # Bound candidate files (max 50 files)
     candidate_files = candidate_files[:50]
 
+    # Pre-parse candidate files to compute inspectable tokens and file counts
+    candidate_file_blobs: list[tuple[str, str, list[tuple[str, int]]]] = []
+    total_tokens_count = 0
+    for file_path, lang in candidate_files:
+        blob_result = read_source_blob(workspace_id, head_sha, file_path, runner=runner)
+        if blob_result.skipped or not blob_result.content:
+            continue
+        tokens = tokenize_source(blob_result.content, lang)
+        total_tokens_count += len(tokens)
+        candidate_file_blobs.append((file_path, lang, tokens))
+
+    candidate_files_count = len(candidate_file_blobs)
+
+    # 2. Handle empty reference index
+    if reference_index.is_empty():
+        return SimilarityAnalysisResult(
+            overlap_score=Measurement[float](
+                value=None,
+                reason="Reference catalog collection is empty; similarity measurement unavailable.",
+            ),
+            matched_paths=[],
+            reference_commit_links=[],
+            coverage_statistics={
+                "candidate_files_analyzed": candidate_files_count,
+                "candidate_tokens_analyzed": total_tokens_count,
+                "reference_files_indexed": 0,
+            },
+            algorithm_version=ALGORITHM_VERSION,
+            algorithm_configuration=algo_config,
+            evidence=[],
+            limitations=[
+                "Reference catalog is empty; comparisons cannot be conducted.",
+                "Similarity results only evaluate matches against the configured reference collection.",
+            ],
+        )
+
     if not candidate_files:
         return SimilarityAnalysisResult(
             overlap_score=Measurement[float](
@@ -395,17 +410,10 @@ def compare_repository(
 
     total_candidate_fps = 0
     matched_candidate_fps = 0
-    total_tokens_count = 0
     matched_paths_details: list[PathMatchDetail] = []
     matched_commit_urls: set[str] = set()
 
-    for file_path, lang in candidate_files:
-        blob_result = read_source_blob(workspace_id, head_sha, file_path, runner=runner)
-        if blob_result.skipped or not blob_result.content:
-            continue
-
-        tokens = tokenize_source(blob_result.content, lang)
-        total_tokens_count += len(tokens)
+    for file_path, lang, tokens in candidate_file_blobs:
         fps = compute_winnowing_fingerprints(tokens)
         if not fps:
             continue
@@ -436,6 +444,8 @@ def compare_repository(
                     matched_fingerprints=file_matches,
                     total_candidate_fingerprints=len(fps),
                     overlap_ratio=ratio,
+                    benchmark_project_name=ref_entry.project_name,
+                    benchmark_category=ref_entry.category,
                 )
             )
             commit_link = f"{ref_entry.repository_url}/commit/{ref_entry.pinned_commit_sha}"

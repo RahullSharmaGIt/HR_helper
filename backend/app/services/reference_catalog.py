@@ -19,6 +19,8 @@ class CatalogEntry:
     language: str
     license: str
     selection_rationale: str
+    project_name: str | None = None
+    category: str | None = None
 
     def __post_init__(self):
         # Validate pinned commit SHA

@@ -200,7 +200,9 @@ class GitHubClient:
                     "forks_count": 2,
                 }
             if owner == "synthetic-candidate" and repo == "inaccessible-repo":
-                raise GitHubRepoNotFoundError("Repository synthetic-candidate/inaccessible-repo not found or is private.")
+                raise GitHubRepoNotFoundError(
+                    "Repository synthetic-candidate/inaccessible-repo not found or is private."
+                )
 
         cache_key = f"gh:repo:{owner.lower()}:{repo.lower()}"
         cached = self._cache_get(cache_key)
@@ -290,13 +292,15 @@ class GitHubClient:
         # Deterministic test adapter mode
         if settings.allow_test_adapters:
             if any(term in query.lower() for term in ["portfolio", "app"]):
-                return [{
-                    "owner": "synthetic-candidate",
-                    "name": "portfolio-app",
-                    "url": "https://github.com/synthetic-candidate/portfolio-app",
-                    "description": "Synthetic portfolio web application",
-                    "stars_count": 24,
-                }]
+                return [
+                    {
+                        "owner": "synthetic-candidate",
+                        "name": "portfolio-app",
+                        "url": "https://github.com/synthetic-candidate/portfolio-app",
+                        "description": "Synthetic portfolio web application",
+                        "stars_count": 24,
+                    }
+                ]
             return []
 
         query_hash = hashlib.sha256(f"{query}:{limit}".encode()).hexdigest()[:16]
@@ -306,7 +310,9 @@ class GitHubClient:
             return cached
 
         url = f"{self.base_url}/search/repositories"
-        params = {"q": f"{query} is:public", "per_page": min(limit, 10), "sort": "stars"}
+        # Omit 'sort' to allow GitHub to use default relevance / best-match ranking
+        per_page = min(max(limit, 10), 30)
+        params = {"q": f"{query} is:public", "per_page": per_page}
         headers = self._get_headers()
 
         try:
@@ -333,6 +339,7 @@ class GitHubClient:
                             "description": item.get("description"),
                             "stars_count": item.get("stargazers_count", 0),
                             "forks_count": item.get("forks_count", 0),
+                            "size": item.get("size", 0),
                         }
                     )
                 self._cache_set(cache_key, results)

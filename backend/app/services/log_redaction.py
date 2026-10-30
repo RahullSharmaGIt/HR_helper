@@ -15,9 +15,7 @@ _COOKIE_SESSION_RE = re.compile(
     r"(session_token=)[a-zA-Z0-9_\-]+",
     re.IGNORECASE,
 )
-_EMAIL_RE = re.compile(
-    r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"
-)
+_EMAIL_RE = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
 _PASSWORD_FIELD_RE = re.compile(
     r'(["\']?(?:password|admin_password|secret|token)["\']?\s*[:=]\s*["\'])([^"\',&\s]+)(["\'])',
     re.IGNORECASE,

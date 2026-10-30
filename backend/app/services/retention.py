@@ -131,7 +131,9 @@ def run_retention_cleanup(
                         for j in rs.jobs:
                             res_created = _to_utc(j.result.created_at) if j.result else None
                             j_created = _to_utc(j.created_at)
-                            if (res_created and res_created <= cutoff) or (j_created and j_created <= cutoff):
+                            if (res_created and res_created <= cutoff) or (
+                                j_created and j_created <= cutoff
+                            ):
                                 is_expired = True
                                 break
 

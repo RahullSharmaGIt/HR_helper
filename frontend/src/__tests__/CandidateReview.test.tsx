@@ -131,6 +131,83 @@ describe("ProjectSelector & RepositorySelector Requirements", () => {
       expect(mockTrigger).toHaveBeenCalledTimes(1);
     });
   });
+
+  it("supports result limit selection, Re-search GitHub, confidence badges, and empty repo flag", async () => {
+    const dummyRepos: api.RepositorySelectionResponse[] = [
+      {
+        id: "r1",
+        projectId: "p1",
+        owner: "ramxcodes",
+        name: "notes-buddy",
+        url: "https://github.com/ramxcodes/notes-buddy",
+        discoveryReason: "Candidate account match (ramxcodes/notes-buddy)",
+        confidenceCategory: "high",
+        isConfirmed: true,
+        createdAt: new Date().toISOString(),
+      },
+      {
+        id: "r2",
+        projectId: "p1",
+        owner: "otherdev",
+        name: "notes-app",
+        url: "https://github.com/otherdev/notes-app",
+        discoveryReason: "Close name and tech match",
+        confidenceCategory: "medium",
+        isConfirmed: false,
+        createdAt: new Date().toISOString(),
+      },
+      {
+        id: "r3",
+        projectId: "p1",
+        owner: "emptyowner",
+        name: "test-repo",
+        url: "https://github.com/emptyowner/test-repo",
+        discoveryReason: "Keyword match via public search [Empty repository]",
+        confidenceCategory: "low",
+        isConfirmed: false,
+        createdAt: new Date().toISOString(),
+      },
+    ];
+
+    const mockConfirm = vi.fn();
+    const mockTrigger = vi.fn();
+    const mockRefresh = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <RepositorySelector
+        projectId="p1"
+        repositories={dummyRepos}
+        onConfirmRepository={mockConfirm}
+        onTriggerAnalysis={mockTrigger}
+        hasActiveJob={false}
+        onRefreshRepositories={mockRefresh}
+      />
+    );
+
+    // Confidence categories displayed with distinct styling
+    expect(screen.getByText(/Confidence: High/i)).toBeInTheDocument();
+    expect(screen.getByText(/Confidence: Medium/i)).toBeInTheDocument();
+    expect(screen.getByText(/Confidence: Low/i)).toBeInTheDocument();
+
+    // Empty repo warning displayed
+    expect(screen.getByText(/Empty Repo \(0 KB\)/i)).toBeInTheDocument();
+
+    // Limit selector dropdown
+    const select = screen.getByLabelText(/Result limit/i);
+    expect(select).toHaveValue("10");
+
+    await act(async () => {
+      fireEvent.change(select, { target: { value: "20" } });
+    });
+    expect(mockRefresh).toHaveBeenCalledWith(20);
+
+    // Re-search GitHub button
+    const refreshBtn = screen.getByRole("button", { name: /Re-search GitHub/i });
+    await act(async () => {
+      fireEvent.click(refreshBtn);
+    });
+    expect(mockRefresh).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe("JobStatus: Polling, Cancellation & Stale Response Handling", () => {

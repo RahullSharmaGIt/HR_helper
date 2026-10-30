@@ -88,7 +88,14 @@ def test_e2e_workflow_complete(e2e_client, e2e_db):
     # -------------------------------------------------------------
     files = [
         ("files", ("alex_mercer_portfolio.pdf", valid_pdf.read_bytes(), "application/pdf")),
-        ("files", ("jordan_lee_inaccessible.docx", valid_docx.read_bytes(), "application/vnd.openxmlformats-officedocument.wordprocessingml.document")),
+        (
+            "files",
+            (
+                "jordan_lee_inaccessible.docx",
+                valid_docx.read_bytes(),
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            ),
+        ),
         ("files", ("corrupt_resume.pdf", corrupt_pdf.read_bytes(), "application/pdf")),
     ]
 

@@ -258,6 +258,12 @@ export default function AnalysisReportPage({ params }: AnalysisReportPageProps) 
           coverageStatistics={similarityData.coverageStatistics || similarityData.coverage_statistics || {}}
           algorithmVersion={similarityData.algorithmVersion || similarityData.algorithm_version || "1.0.0"}
           limitations={similarityData.limitations || []}
+          candidateRepoUrl={repoUrl}
+          comparisonStatus={
+            report.assessment?.coverageComponents?.reference_comparison?.status ||
+            report.assessment?.coverage_components?.reference_comparison?.status ||
+            (overallRatio !== null ? "complete" : "unavailable")
+          }
         />
 
         {/* 7. Full Atomic Supporting Evidence Catalog */}

@@ -6,6 +6,7 @@ Generates synthetic test fixtures:
 3. Synthetic DOCX resume with second candidate and inaccessible project.
 4. Corrupt PDF file to test partial batch upload rejection.
 """
+
 import os
 import shutil
 import subprocess
@@ -26,12 +27,18 @@ def create_synthetic_git_repo(output_dir: Path) -> Path:
         repo_path = Path(temp_repo)
 
         # 1. git init
-        subprocess.run(["git", "init", "-b", "main"], cwd=repo_path, check=True, capture_output=True)
+        subprocess.run(
+            ["git", "init", "-b", "main"], cwd=repo_path, check=True, capture_output=True
+        )
         subprocess.run(["git", "config", "user.name", "Alex Mercer"], cwd=repo_path, check=True)
-        subprocess.run(["git", "config", "user.email", "alex.mercer@example.org"], cwd=repo_path, check=True)
+        subprocess.run(
+            ["git", "config", "user.email", "alex.mercer@example.org"], cwd=repo_path, check=True
+        )
 
         # 2. Commit 1: Initial commit by candidate
-        (repo_path / "README.md").write_text("# Portfolio App\nA web application for demonstrating project work.\n")
+        (repo_path / "README.md").write_text(
+            "# Portfolio App\nA web application for demonstrating project work.\n"
+        )
         (repo_path / "main.py").write_text(
             '"""Main web service module."""\n\ndef run_server():\n    print("Starting server...")\n\nif __name__ == "__main__":\n    run_server()\n'
         )
@@ -39,7 +46,11 @@ def create_synthetic_git_repo(output_dir: Path) -> Path:
         subprocess.run(
             ["git", "commit", "-m", "Initial commit: basic service skeleton"],
             cwd=repo_path,
-            env={**os.environ, "GIT_AUTHOR_DATE": "2024-01-15T10:00:00Z", "GIT_COMMITTER_DATE": "2024-01-15T10:00:00Z"},
+            env={
+                **os.environ,
+                "GIT_AUTHOR_DATE": "2024-01-15T10:00:00Z",
+                "GIT_COMMITTER_DATE": "2024-01-15T10:00:00Z",
+            },
             check=True,
             capture_output=True,
         )
@@ -50,9 +61,20 @@ def create_synthetic_git_repo(output_dir: Path) -> Path:
         )
         subprocess.run(["git", "add", "utils.py"], cwd=repo_path, check=True)
         subprocess.run(
-            ["git", "commit", "-m", "Add configuration utilities", "--author", "Sam Taylor <sam.taylor@example.org>"],
+            [
+                "git",
+                "commit",
+                "-m",
+                "Add configuration utilities",
+                "--author",
+                "Sam Taylor <sam.taylor@example.org>",
+            ],
             cwd=repo_path,
-            env={**os.environ, "GIT_AUTHOR_DATE": "2024-02-01T14:30:00Z", "GIT_COMMITTER_DATE": "2024-02-01T14:30:00Z"},
+            env={
+                **os.environ,
+                "GIT_AUTHOR_DATE": "2024-02-01T14:30:00Z",
+                "GIT_COMMITTER_DATE": "2024-02-01T14:30:00Z",
+            },
             check=True,
             capture_output=True,
         )
@@ -65,13 +87,21 @@ def create_synthetic_git_repo(output_dir: Path) -> Path:
         subprocess.run(
             ["git", "commit", "-m", "Integrate config parser and improve logging"],
             cwd=repo_path,
-            env={**os.environ, "GIT_AUTHOR_DATE": "2024-03-10T09:15:00Z", "GIT_COMMITTER_DATE": "2024-03-10T09:15:00Z"},
+            env={
+                **os.environ,
+                "GIT_AUTHOR_DATE": "2024-03-10T09:15:00Z",
+                "GIT_COMMITTER_DATE": "2024-03-10T09:15:00Z",
+            },
             check=True,
             capture_output=True,
         )
 
         # 5. Clone as bare repository into target
-        subprocess.run(["git", "clone", "--bare", str(repo_path), str(target_bare_dir)], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "clone", "--bare", str(repo_path), str(target_bare_dir)],
+            check=True,
+            capture_output=True,
+        )
 
     return target_bare_dir
 

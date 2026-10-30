@@ -119,3 +119,38 @@ def test_preserves_page_numbers_across_pages():
 
     s2 = next(s for s in suggestions if s.name == "Query Engine")
     assert s2.source_page == 3
+
+
+def test_extract_pipe_separated_projects_with_dates_and_bullets():
+    resume_text = """
+    Candidate Dev
+    dev@example.com
+
+    TECHNICAL SKILLS
+    Languages: JavaScript, TypeScript, Python
+
+    Projects
+    Moonstone 2K25 Website | Next.js, Three.js, R3F, Tailwind CSS, Framer Motion, Matter.js
+    Mar 2025
+    • Designed and developed the official website for Moonstone 2K25
+    — delivering a high-impact, immersive web experience.
+
+    Notes Buddy | Next.js, Tailwind CSS, Razorpay, Aceternity UI, Shadcn UI, NextAuth
+    Jan 2025
+    • Built a comprehensive educational platform with interactive quizzes
+    • Open-sourced project with 10+ contributors and 15+ pull requests merged.
+
+    Syncify | React, TypeScript, Tailwind CSS, Shadcn UI, Clerk, Node.js, Express.js, MongoDB
+    Nov 2024
+    • Developed a full-stack music streaming app with real-time chat
+
+    EDUCATION
+    Medi-Caps University
+    """
+    suggestions = extract_project_suggestions(resume_text)
+    assert len(suggestions) == 3
+    names = [s.name for s in suggestions]
+    assert names == ["Moonstone 2K25 Website", "Notes Buddy", "Syncify"]
+    assert "Next.js, Three.js" in (suggestions[0].description or "")
+    assert "Razorpay" in (suggestions[1].description or "")
+    assert "music streaming app" in (suggestions[2].description or "")

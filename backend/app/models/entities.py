@@ -177,6 +177,102 @@ class AnalysisResult(Base):
     job: Mapped["AnalysisJob"] = relationship("AnalysisJob", back_populates="result")
 
 
+class BenchmarkProject(Base):
+    __tablename__ = "benchmark_projects"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    category: Mapped[str] = mapped_column(String(100), unique=True, nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False
+    )
+
+    repository: Mapped[Optional["BenchmarkRepository"]] = relationship(
+        "BenchmarkRepository",
+        back_populates="project",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
+
+
+class BenchmarkRepository(Base):
+    __tablename__ = "benchmark_repositories"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    benchmark_project_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("benchmark_projects.id", ondelete="CASCADE"),
+        unique=True,
+        nullable=False,
+        index=True,
+    )
+    repository_url: Mapped[str] = mapped_column(
+        String(512), unique=True, nullable=False, index=True
+    )
+    owner: Mapped[str] = mapped_column(String(255), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    primary_language: Mapped[str] = mapped_column(String(50), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    license: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    stars_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    default_branch: Mapped[str] = mapped_column(String(100), default="main", nullable=False)
+    pinned_commit_sha: Mapped[str] = mapped_column(String(40), nullable=False)
+    indexing_status: Mapped[str] = mapped_column(
+        String(50), default="pending", nullable=False, index=True
+    )
+    failure_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    indexed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False
+    )
+
+    project: Mapped["BenchmarkProject"] = relationship(
+        "BenchmarkProject", back_populates="repository"
+    )
+    fingerprints: Mapped[list["BenchmarkFileFingerprint"]] = relationship(
+        "BenchmarkFileFingerprint",
+        back_populates="repository",
+        cascade="all, delete-orphan",
+    )
+
+
+class BenchmarkFileFingerprint(Base):
+    __tablename__ = "benchmark_file_fingerprints"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    benchmark_repository_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("benchmark_repositories.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    file_path: Mapped[str] = mapped_column(String(1024), nullable=False)
+    file_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    language: Mapped[str] = mapped_column(String(50), nullable=False)
+    tokens_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    fingerprints: Mapped[list[int]] = mapped_column(JSON_TYPE, default=list, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, nullable=False
+    )
+
+    repository: Mapped["BenchmarkRepository"] = relationship(
+        "BenchmarkRepository", back_populates="fingerprints"
+    )
+
+
+Index(
+    "ix_bm_file_fingerprints_repo_path",
+    BenchmarkFileFingerprint.benchmark_repository_id,
+    BenchmarkFileFingerprint.file_path,
+    unique=True,
+)
 Index("ix_resumes_candidate_created", Resume.candidate_id, Resume.created_at)
 Index("ix_projects_candidate_created", Project.candidate_id, Project.created_at)
 Index(

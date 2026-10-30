@@ -260,7 +260,7 @@ def test_discover_repositories_search_fallback():
     assert "Keyword match" in matches[1].discovery_reason
 
 
-def test_discover_repositories_max_five_results():
+def test_discover_repositories_configurable_limit():
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path == "/search/repositories":
             return httpx.Response(
@@ -273,7 +273,7 @@ def test_discover_repositories_max_five_results():
                             "owner": {"login": "dev"},
                             "visibility": "public",
                         }
-                        for i in range(10)
+                        for i in range(25)
                     ]
                 },
             )
@@ -283,6 +283,56 @@ def test_discover_repositories_max_five_results():
     client = GitHubClient(base_url="https://api.github.com", transport=transport)
 
     project = ProjectSuggestion(name="Big Project", explicit_github_urls=[])
-    matches = discover_repositories(project, github_client=client)
 
-    assert len(matches) == 5
+    # Default limit is 10
+    matches_default = discover_repositories(project, github_client=client)
+    assert len(matches_default) == 10
+
+    # Explicit limit 5
+    matches_5 = discover_repositories(project, github_client=client, limit=5)
+    assert len(matches_5) == 5
+
+    # Explicit limit 20
+    matches_20 = discover_repositories(project, github_client=client, limit=20)
+    assert len(matches_20) == 20
+
+
+def test_discover_repositories_candidate_handle_high_confidence():
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/search/repositories":
+            return httpx.Response(
+                200,
+                json={
+                    "items": [
+                        {
+                            "html_url": "https://github.com/randomdev/notes-buddy",
+                            "name": "notes-buddy",
+                            "owner": {"login": "randomdev"},
+                            "visibility": "public",
+                        },
+                        {
+                            "html_url": "https://github.com/ramxcodes/notes-buddy",
+                            "name": "notes-buddy",
+                            "owner": {"login": "ramxcodes"},
+                            "visibility": "public",
+                        },
+                    ]
+                },
+            )
+        raise AssertionError("Unexpected request")
+
+    transport = httpx.MockTransport(handler)
+    client = GitHubClient(base_url="https://api.github.com", transport=transport)
+
+    project = ProjectSuggestion(name="Notes Buddy", explicit_github_urls=[])
+    matches = discover_repositories(
+        project, github_client=client, limit=10, candidate_handle="ramxcodes"
+    )
+
+    # Candidate's own repository should be prioritized at index 0 with HIGH confidence
+    assert len(matches) == 2
+    assert matches[0].owner == "ramxcodes"
+    assert matches[0].confidence_category == ConfidenceCategory.HIGH.value
+    assert "Candidate account match" in matches[0].discovery_reason
+    assert matches[1].owner == "randomdev"
+    assert matches[1].confidence_category == ConfidenceCategory.MEDIUM.value

@@ -58,7 +58,10 @@ class CrossOriginProtectionMiddleware(BaseHTTPMiddleware):
         origin = request.headers.get("origin")
         if origin and request.method in {"POST", "PUT", "PATCH", "DELETE"}:
             clean_origin = origin.rstrip("/")
-            if clean_origin not in settings.allowed_origins and origin not in settings.allowed_origins:
+            if (
+                clean_origin not in settings.allowed_origins
+                and origin not in settings.allowed_origins
+            ):
                 req_id = getattr(request.state, "request_id", "")
                 return JSONResponse(
                     status_code=403,

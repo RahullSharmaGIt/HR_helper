@@ -202,6 +202,164 @@
         "title": "BatchUploadResponse",
         "type": "object"
       },
+      "BenchmarkProjectResponse": {
+        "properties": {
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "createdAt": {
+            "title": "Createdat",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "repository": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BenchmarkRepositorySummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "updatedAt": {
+            "title": "Updatedat",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "category",
+          "name",
+          "createdAt",
+          "updatedAt"
+        ],
+        "title": "BenchmarkProjectResponse",
+        "type": "object"
+      },
+      "BenchmarkRepositorySummary": {
+        "properties": {
+          "defaultBranch": {
+            "default": "main",
+            "title": "Defaultbranch",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "failureReason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failurereason"
+          },
+          "fingerprintsCount": {
+            "default": 0,
+            "title": "Fingerprintscount",
+            "type": "integer"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "indexedAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Indexedat"
+          },
+          "indexingStatus": {
+            "title": "Indexingstatus",
+            "type": "string"
+          },
+          "license": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "License"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "owner": {
+            "title": "Owner",
+            "type": "string"
+          },
+          "pinnedCommitSha": {
+            "title": "Pinnedcommitsha",
+            "type": "string"
+          },
+          "primaryLanguage": {
+            "title": "Primarylanguage",
+            "type": "string"
+          },
+          "repositoryUrl": {
+            "title": "Repositoryurl",
+            "type": "string"
+          },
+          "starsCount": {
+            "default": 0,
+            "title": "Starscount",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "repositoryUrl",
+          "owner",
+          "name",
+          "primaryLanguage",
+          "pinnedCommitSha",
+          "indexingStatus"
+        ],
+        "title": "BenchmarkRepositorySummary",
+        "type": "object"
+      },
       "Body_upload_resume_batch_api_v1_resume_batches_post": {
         "properties": {
           "files": {
@@ -668,6 +826,51 @@
         "summary": "Retrieve completed analysis report"
       }
     },
+    "/api/v1/benchmarks": {
+      "get": {
+        "operationId": "list_benchmarks_api_v1_benchmarks_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/BenchmarkProjectResponse"
+                  },
+                  "title": "Response List Benchmarks Api V1 Benchmarks Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List initial benchmark projects and indexing status"
+      }
+    },
+    "/api/v1/benchmarks/index": {
+      "post": {
+        "operationId": "trigger_benchmark_indexing_api_v1_benchmarks_index_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response Trigger Benchmark Indexing Api V1 Benchmarks Index Post",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Trigger indexing of benchmark catalog repositories"
+      }
+    },
     "/api/v1/candidates": {
       "get": {
         "operationId": "list_candidates_api_v1_candidates_get",
@@ -942,6 +1145,60 @@
         "summary": "Enqueue confirmed repository for analysis"
       }
     },
+    "/api/v1/projects/{project_id}/discover-repositories": {
+      "post": {
+        "operationId": "discover_project_repositories_endpoint_api_v1_projects__project_id__discover_repositories_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RepositorySelectionResponse"
+                  },
+                  "title": "Response Discover Project Repositories Endpoint Api V1 Projects  Project Id  Discover Repositories Post",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Discover candidate repositories for project with custom limit"
+      }
+    },
     "/api/v1/projects/{project_id}/repositories": {
       "get": {
         "operationId": "get_project_repositories_api_v1_projects__project_id__repositories_get",
@@ -954,6 +1211,22 @@
               "format": "uuid",
               "title": "Project Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
             }
           }
         ],

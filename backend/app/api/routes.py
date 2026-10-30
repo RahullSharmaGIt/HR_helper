@@ -1,4 +1,5 @@
 import logging
+import re
 import uuid
 from pathlib import Path
 from typing import Any
@@ -13,6 +14,7 @@ from fastapi import (
     status,
 )
 from fastapi.responses import FileResponse
+from sqlalchemy import case
 from sqlalchemy.orm import Session
 
 from app.api.auth import (
@@ -34,6 +36,7 @@ from app.db import get_db
 from app.models.entities import (
     AnalysisJob,
     AnalysisResult,
+    BenchmarkProject,
     Candidate,
     Project,
     RepositorySelection,
@@ -43,9 +46,12 @@ from app.schemas.contracts import (
     AnalysisJobResponse,
     BatchUploadItem,
     BatchUploadResponse,
+    BenchmarkProjectResponse,
+    BenchmarkRepositorySummary,
     CandidateDetailResponse,
     CandidateSummary,
     ConfirmRepositoryRequest,
+    ProjectSuggestion,
     ProjectSummary,
     RepositorySelectionResponse,
     ResumeSummary,
@@ -53,6 +59,7 @@ from app.schemas.contracts import (
     SessionCreateRequest,
     SessionResponse,
 )
+from app.services.benchmark_catalog import seed_and_index_benchmarks
 from app.services.github_client import GitHubClient
 from app.services.job_service import (
     DuplicateActiveJobError,
@@ -62,7 +69,10 @@ from app.services.job_service import (
 from app.services.project_extraction import (
     extract_project_suggestions,
 )
-from app.services.repository_discovery import discover_repositories
+from app.services.repository_discovery import (
+    discover_repositories,
+    extract_candidate_github_handle,
+)
 from app.services.resumes import (
     extract_resume_text,
     safe_download_filename,
@@ -219,9 +229,49 @@ async def upload_resume_batch(
 
             # 4. Candidate record
             derived_name = Path(filename).stem.replace("_", " ").replace("-", " ").title()
+
+            # Extract email if present in resume text
+            extracted_email: str | None = None
+            email_match = re.search(
+                r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b",
+                extraction.raw_text,
+            )
+            if email_match:
+                extracted_email = email_match.group(0).strip()
+
+            # Extract candidate full name from header lines if available
+            candidate_name = derived_name
+            header_lines = [
+                line.strip() for line in extraction.raw_text.splitlines() if line.strip()
+            ]
+            for header_line in header_lines[:5]:
+                clean = re.sub(r"[^a-zA-Z\s]", "", header_line).strip()
+                words = clean.split()
+                if 1 <= len(words) <= 4 and 3 <= len(clean) <= 40:
+                    disqualified = any(
+                        keyword in header_line.lower()
+                        for keyword in [
+                            "curriculum",
+                            "vitae",
+                            "resume",
+                            "skills",
+                            "experience",
+                            "page",
+                            "github",
+                            "linkedin",
+                            "email",
+                            "phone",
+                            "http",
+                        ]
+                    )
+                    if not disqualified:
+                        candidate_name = " ".join(w.capitalize() for w in words)
+                        break
+
             candidate = Candidate(
                 id=uuid.uuid4(),
-                name=derived_name,
+                name=candidate_name,
+                email=extracted_email,
             )
             db.add(candidate)
             db.flush()
@@ -240,6 +290,9 @@ async def upload_resume_batch(
 
             # 6. Extract project suggestions and find repo candidates
             suggestions = extract_project_suggestions(extraction.pages)
+            candidate_handle = extract_candidate_github_handle(
+                extraction.raw_text, extracted_email
+            )
             created_projects_count = 0
 
             for proj_sug in suggestions:
@@ -256,9 +309,14 @@ async def upload_resume_batch(
                 db.flush()
                 created_projects_count += 1
 
-                # Initial repository discovery
+                # Initial repository discovery (up to 20 candidates per project)
                 try:
-                    matches = discover_repositories(proj_sug, gh_client)
+                    matches = discover_repositories(
+                        proj_sug,
+                        gh_client,
+                        limit=20,
+                        candidate_handle=candidate_handle,
+                    )
                     for match in matches:
                         selection = RepositorySelection(
                             id=uuid.uuid4(),
@@ -329,10 +387,10 @@ def list_candidates(
                 name=c.name,
                 email=c.email,
                 selected_project_id=c.selected_project_id,
-                resumes_count=len(c.resumes),
-                projects_count=len(c.projects),
-                created_at=c.created_at.isoformat(),
-                updated_at=c.updated_at.isoformat(),
+                resumes_count=len(c.resumes) if c.resumes is not None else 0,
+                projects_count=len(c.projects) if c.projects is not None else 0,
+                created_at=c.created_at.isoformat() if c.created_at else None,
+                updated_at=c.updated_at.isoformat() if c.updated_at else None,
             )
         )
     return result
@@ -358,9 +416,9 @@ def get_candidate(
             original_filename=r.original_filename,
             content_type=r.content_type,
             file_size_bytes=r.file_size_bytes,
-            created_at=r.created_at.isoformat(),
+            created_at=r.created_at.isoformat() if r.created_at else None,
         )
-        for r in c.resumes
+        for r in (c.resumes or [])
     ]
 
     projects = [
@@ -370,11 +428,11 @@ def get_candidate(
             name=p.name,
             description=p.description,
             is_selected=p.is_selected,
-            explicit_github_urls=p.explicit_github_urls,
+            explicit_github_urls=p.explicit_github_urls or [],
             source_page=p.source_page,
-            created_at=p.created_at.isoformat(),
+            created_at=p.created_at.isoformat() if p.created_at else None,
         )
-        for p in c.projects
+        for p in (c.projects or [])
     ]
 
     return CandidateDetailResponse(
@@ -384,8 +442,8 @@ def get_candidate(
         selected_project_id=c.selected_project_id,
         resumes=resumes,
         projects=projects,
-        created_at=c.created_at.isoformat(),
-        updated_at=c.updated_at.isoformat(),
+        created_at=c.created_at.isoformat() if c.created_at else None,
+        updated_at=c.updated_at.isoformat() if c.updated_at else None,
     )
 
 
@@ -431,6 +489,7 @@ def select_candidate_project(
 )
 def get_project_repositories(
     project_id: uuid.UUID,
+    limit: int | None = None,
     db: Session = Depends(get_db),
     _sess: dict[str, Any] = Depends(require_admin_session),
 ) -> list[RepositorySelectionResponse]:
@@ -438,9 +497,23 @@ def get_project_repositories(
     if not project:
         raise APIException(status_code=404, code="NOT_FOUND", message="Project not found.")
 
-    selections = (
-        db.query(RepositorySelection).filter(RepositorySelection.project_id == project_id).all()
+    query = (
+        db.query(RepositorySelection)
+        .filter(RepositorySelection.project_id == project_id)
+        .order_by(
+            RepositorySelection.is_confirmed.desc(),
+            case(
+                (RepositorySelection.confidence_category == "high", 1),
+                (RepositorySelection.confidence_category == "medium", 2),
+                else_=3,
+            ),
+            RepositorySelection.created_at.asc(),
+        )
     )
+    if limit is not None and limit > 0:
+        query = query.limit(limit)
+
+    selections = query.all()
 
     return [
         RepositorySelectionResponse(
@@ -455,6 +528,98 @@ def get_project_repositories(
             created_at=s.created_at.isoformat(),
         )
         for s in selections
+    ]
+
+
+@api_router.post(
+    "/projects/{project_id}/discover-repositories",
+    response_model=list[RepositorySelectionResponse],
+    summary="Discover candidate repositories for project with custom limit",
+)
+def discover_project_repositories_endpoint(
+    project_id: uuid.UUID,
+    limit: int = 10,
+    db: Session = Depends(get_db),
+    _csrf: dict[str, Any] = Depends(require_csrf),
+) -> list[RepositorySelectionResponse]:
+    project = db.get(Project, project_id)
+    if not project:
+        raise APIException(status_code=404, code="NOT_FOUND", message="Project not found.")
+
+    limit = max(5, min(20, limit))
+    candidate = project.candidate
+    candidate_handle = None
+    if candidate:
+        raw_text = candidate.resumes[0].raw_text if candidate.resumes else ""
+        candidate_handle = extract_candidate_github_handle(raw_text, candidate.email)
+
+    proj_sug = ProjectSuggestion(
+        name=project.name,
+        description=project.description,
+        explicit_github_urls=project.explicit_github_urls,
+        source_page=project.source_page,
+    )
+    gh_client = GitHubClient()
+    matches = discover_repositories(
+        proj_sug, gh_client, limit=limit, candidate_handle=candidate_handle
+    )
+
+    existing_selections = {
+        s.url: s
+        for s in db.query(RepositorySelection)
+        .filter(RepositorySelection.project_id == project.id)
+        .all()
+    }
+
+    for match in matches:
+        if match.url in existing_selections:
+            sel = existing_selections[match.url]
+            sel.discovery_reason = match.discovery_reason
+            sel.confidence_category = match.confidence_category
+        else:
+            new_sel = RepositorySelection(
+                id=uuid.uuid4(),
+                project_id=project.id,
+                url=match.url,
+                owner=match.owner,
+                name=match.name,
+                discovery_reason=match.discovery_reason,
+                confidence_category=match.confidence_category,
+                is_confirmed=False,
+            )
+            db.add(new_sel)
+
+    db.commit()
+
+    updated = (
+        db.query(RepositorySelection)
+        .filter(RepositorySelection.project_id == project.id)
+        .order_by(
+            RepositorySelection.is_confirmed.desc(),
+            case(
+                (RepositorySelection.confidence_category == "high", 1),
+                (RepositorySelection.confidence_category == "medium", 2),
+                else_=3,
+            ),
+            RepositorySelection.created_at.asc(),
+        )
+        .limit(limit)
+        .all()
+    )
+
+    return [
+        RepositorySelectionResponse(
+            id=s.id,
+            project_id=s.project_id,
+            url=s.url,
+            owner=s.owner,
+            name=s.name,
+            discovery_reason=s.discovery_reason,
+            confidence_category=s.confidence_category,
+            is_confirmed=s.is_confirmed,
+            created_at=s.created_at.isoformat(),
+        )
+        for s in updated
     ]
 
 
@@ -701,7 +866,9 @@ def download_resume(
 
     # Prevent path traversal outside storage directory
     if not str(file_path).startswith(str(base_dir)) or not file_path.is_file():
-        raise APIException(status_code=404, code="NOT_FOUND", message="Resume file not found on disk.")
+        raise APIException(
+            status_code=404, code="NOT_FOUND", message="Resume file not found on disk."
+        )
 
     safe_name = safe_download_filename(resume.original_filename)
     return FileResponse(
@@ -730,3 +897,65 @@ def delete_candidate(
         "status": "ok",
         "message": "Candidate and all associated data deleted successfully.",
     }
+
+
+# --------------------------------------------------------------------------
+# 8. Benchmark Catalog Endpoints
+# --------------------------------------------------------------------------
+@api_router.get(
+    "/benchmarks",
+    response_model=list[BenchmarkProjectResponse],
+    summary="List initial benchmark projects and indexing status",
+)
+def list_benchmarks(
+    db: Session = Depends(get_db),
+    _sess: dict[str, Any] = Depends(require_admin_session),
+) -> list[BenchmarkProjectResponse]:
+    projects = db.query(BenchmarkProject).order_by(BenchmarkProject.created_at.asc()).all()
+    if not projects:
+        seed_and_index_benchmarks(db)
+        projects = db.query(BenchmarkProject).order_by(BenchmarkProject.created_at.asc()).all()
+
+    result = []
+    for p in projects:
+        repo_summary = None
+        if p.repository:
+            repo_summary = BenchmarkRepositorySummary(
+                id=p.repository.id,
+                repository_url=p.repository.repository_url,
+                owner=p.repository.owner,
+                name=p.repository.name,
+                primary_language=p.repository.primary_language,
+                description=p.repository.description,
+                license=p.repository.license,
+                stars_count=p.repository.stars_count,
+                default_branch=p.repository.default_branch,
+                pinned_commit_sha=p.repository.pinned_commit_sha,
+                indexing_status=p.repository.indexing_status,
+                failure_reason=p.repository.failure_reason,
+                indexed_at=p.repository.indexed_at.isoformat() if p.repository.indexed_at else None,
+                fingerprints_count=len(p.repository.fingerprints),
+            )
+        result.append(
+            BenchmarkProjectResponse(
+                id=p.id,
+                category=p.category,
+                name=p.name,
+                description=p.description,
+                repository=repo_summary,
+                created_at=p.created_at.isoformat() if p.created_at else "",
+                updated_at=p.updated_at.isoformat() if p.updated_at else "",
+            )
+        )
+    return result
+
+
+@api_router.post(
+    "/benchmarks/index",
+    summary="Trigger indexing of benchmark catalog repositories",
+)
+def trigger_benchmark_indexing(
+    db: Session = Depends(get_db),
+    _csrf: dict[str, Any] = Depends(require_csrf),
+) -> list[dict[str, Any]]:
+    return seed_and_index_benchmarks(db)

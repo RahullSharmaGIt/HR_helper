@@ -15,6 +15,7 @@ from app.config import settings
 from app.db import transaction_scope
 from app.models.entities import AnalysisJob, AnalysisResult, utc_now
 from app.schemas.contracts import AnalysisReport, JobState
+from app.services.benchmark_catalog import build_benchmark_reference_index
 from app.services.github_client import (
     GitHubClient,
     GitHubRateLimitError,
@@ -226,13 +227,16 @@ def _execute_analysis(
         job.progress = 75
         session.flush()
 
-        catalog_path = (
-            Path(reference_catalog_path)
-            if reference_catalog_path
-            else Path(__file__).resolve().parent.parent.parent / "reference_catalog.json"
-        )
-        catalog = load_reference_catalog(catalog_path)
-        ref_index = build_reference_index(catalog)
+        if reference_catalog_path:
+            catalog = load_reference_catalog(Path(reference_catalog_path))
+            ref_index = build_reference_index(catalog)
+        else:
+            ref_index = build_benchmark_reference_index(session)
+            if ref_index.is_empty():
+                catalog = load_reference_catalog()
+                if catalog:
+                    ref_index = build_reference_index(catalog)
+
         similarity_result = compare_repository(manifest, ref_index, runner=runner)
 
         job.progress = 85

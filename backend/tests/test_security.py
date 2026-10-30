@@ -118,7 +118,9 @@ def test_oversized_archives_rejected():
         zf.writestr("word/document.xml", b"0" * (settings.max_docx_uncompressed_bytes + 1024))
     oversized_docx = bio.getvalue()
 
-    with pytest.raises(ValueError, match="DOCX archive exceeds maximum uncompressed expansion limit"):
+    with pytest.raises(
+        ValueError, match="DOCX archive exceeds maximum uncompressed expansion limit"
+    ):
         validate_resume("malicious.docx", oversized_docx)
 
     # 2. Oversized total file size
@@ -271,7 +273,9 @@ def test_actionable_errors_without_stack_traces(test_db_session):
             assert "Traceback (most recent call last)" not in res.text
 
             # 2. Test 500 unhandled exception handler masks internal tracebacks
-            with patch.object(test_db_session, "query", side_effect=RuntimeError("Secret database crash")):
+            with patch.object(
+                test_db_session, "query", side_effect=RuntimeError("Secret database crash")
+            ):
                 res500 = client.get("/api/v1/candidates")
                 assert res500.status_code == 500
                 data500 = res500.json()

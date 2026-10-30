@@ -39,6 +39,12 @@ STOP_SECTION_REGEX = re.compile(
 )
 
 
+DATE_ONLY_REGEX = re.compile(
+    r"^(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s*\d{0,4}|\d{1,2}/\d{4}|\d{4})\s*(?:[-–—]\s*(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s*\d{0,4}|\d{1,2}/\d{4}|\d{4}|present))?$",
+    re.IGNORECASE,
+)
+
+
 def extract_github_urls(text: str) -> list[str]:
     """
     Finds and sanitizes explicit GitHub repository URLs from text.
@@ -67,8 +73,8 @@ def extract_github_urls(text: str) -> list[str]:
 
 def _clean_project_title(line: str) -> str:
     cleaned = re.sub(r"https?://\S+", "", line)  # remove url
-    cleaned = re.sub(r"^[*\-•–—\s]+", "", cleaned)  # remove leading bullets/symbols
-    cleaned = re.sub(r"\s+[|•–—]\s+", " ", cleaned)  # remove separators
+    cleaned = re.sub(r"^[*\-•–—∗◦▪▫\s]+", "", cleaned)  # remove leading bullets/symbols
+    cleaned = re.sub(r"\s+[|•–—∗◦▪▫]\s+", " ", cleaned)  # remove separators
     cleaned = re.sub(
         r"\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s*\d{4}\b",
         "",
@@ -148,14 +154,24 @@ def extract_project_suggestions(
             line_urls = extract_github_urls(line)
 
             if in_project_section:
-                is_bullet = line.startswith(("*", "-", "•", "–"))
+                # Skip date-only lines (e.g. "Mar 2025", "2023 - 2024")
+                if DATE_ONLY_REGEX.match(line):
+                    continue
+
+                is_bullet = line.startswith(("*", "-", "•", "–", "—", "∗", "◦", "▪", "▫", ">"))
                 is_sentence = line.endswith((".", ";", ","))
                 starts_lower = line[0].islower() if line else False
                 starts_continuation = bool(
-                    re.match(r"^(?:and|with|for|via|by|to|in|of|or|from|using)\b", line, re.IGNORECASE)
+                    re.match(
+                        r"^(?:and|with|for|via|by|to|in|of|or|from|using)\b", line, re.IGNORECASE
+                    )
                 )
                 is_tech_line = bool(
-                    re.match(r"^(?:technologies|tech stack|tools|languages|frameworks|built with)\s*:", line, re.IGNORECASE)
+                    re.match(
+                        r"^(?:technologies|tech stack|tools|languages|frameworks|built with)\s*:",
+                        line,
+                        re.IGNORECASE,
+                    )
                 )
 
                 # If current project already exists and has no URLs, and this line contains URLs,
@@ -167,40 +183,42 @@ def extract_project_suggestions(
                         current_desc_lines.append(desc_part)
                     continue
 
-                # Line looks like a new project title if:
-                # - Not a bullet
-                # - Not starting with lowercase or continuation words
-                # - Not a tech stack header
-                # - Not ending with typical sentence punctuation (. or , or ;)
-                # - Length between 3 and 80 chars
-                is_likely_title = (
+                # Check for pipe-delimited project title: "Project Name | Tech Stack"
+                title_candidate: str | None = None
+                extra_desc: str | None = None
+
+                if not is_bullet and "|" in line:
+                    parts = line.split("|", 1)
+                    t = _clean_project_title(parts[0])
+                    if 2 <= len(t) <= 80:
+                        title_candidate = t
+                        extra_desc = parts[1].strip()
+                elif (
                     not is_bullet
                     and not starts_lower
                     and not starts_continuation
                     and not is_tech_line
                     and not is_sentence
-                    and 3 <= len(line) < 80
-                )
+                ):
+                    t = _clean_project_title(line)
+                    if 2 <= len(t) <= 80:
+                        title_candidate = t
 
-                if is_likely_title:
+                if title_candidate:
                     # If we already have a project in progress that has some description/URLs, flush it
                     if current_project_name and (current_desc_lines or current_urls):
                         flush_project()
 
                     if not current_project_name:
-                        cleaned_name = _clean_project_title(line)
-                        if not cleaned_name and line_urls:
-                            repo_part = line_urls[0].split("/")[-1]
-                            cleaned_name = repo_part.replace("-", " ").replace("_", " ").title()
-
-                        if cleaned_name:
-                            current_project_name = cleaned_name
-                            current_urls.extend(line_urls)
+                        current_project_name = title_candidate
+                        current_urls.extend(line_urls)
+                        if extra_desc:
+                            current_desc_lines.append(extra_desc)
                         continue
 
                 # Otherwise it's a description or detail line for the current project
                 if current_project_name:
-                    cleaned_desc_line = re.sub(r"^[*\-•–—\s]+", "", line)
+                    cleaned_desc_line = re.sub(r"^[*\-•–—∗◦▪▫\s]+", "", line)
                     if cleaned_desc_line:
                         current_desc_lines.append(cleaned_desc_line)
                     if line_urls:

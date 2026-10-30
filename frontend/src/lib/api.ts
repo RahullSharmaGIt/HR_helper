@@ -270,10 +270,24 @@ export async function deleteCandidate(
 // ---------------------------------------------------------------------------
 
 export async function listProjectRepositories(
-  projectId: string
+  projectId: string,
+  limit?: number
+): Promise<RepositorySelectionResponse[]> {
+  const query = limit ? `?limit=${limit}` : "";
+  return request<RepositorySelectionResponse[]>(
+    `/api/v1/projects/${projectId}/repositories${query}`
+  );
+}
+
+export async function discoverProjectRepositories(
+  projectId: string,
+  limit: number = 10
 ): Promise<RepositorySelectionResponse[]> {
   return request<RepositorySelectionResponse[]>(
-    `/api/v1/projects/${projectId}/repositories`
+    `/api/v1/projects/${projectId}/discover-repositories?limit=${limit}`,
+    {
+      method: "POST",
+    }
   );
 }
 
